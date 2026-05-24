@@ -235,6 +235,3 @@ scripts/                       # index build, training, eval
 ## Citation
 
 Anonymized for double-blind review. Citation will be added upon acceptance.
-
-This work builds on the LocAgent code-localization framework and tool
-infrastructure (Chen et al., 2025).
