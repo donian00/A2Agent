@@ -1,4 +1,4 @@
-# TRACER
+# EMNLP2026 Submission
 
 ### Action-Level Credit Assignment for Repository-Level Code Localization
 
@@ -207,28 +207,6 @@ results = evaluate_results('result_path/verified/location/loc_outputs.jsonl')
 | Rollouts/issue `N` | 8 | | Max tool calls | 20 |
 | LoRA `r`, `alpha` | 16, 16 | | Batch size | 16 |
 | LR (SFT / RL) | 2e-4 / 5e-5 | | Optimizer | AdamW (wd 0.01) |
-
----
-
-## Repository Structure
-
-```
-auto_search_main.py            # agent loop / evaluation entry point
-build_bm25_index.py            # BM25 index builder
-sft_train.py                   # supervised fine-tuning (Stage 1)
-dependency_graph/              # repository graph index builder
-repo_index/                    # tree-sitter parsing and code indexing
-plugins/location_tools/        # the 6 retrieval tools (repo_ops, retriever)
-util/                          # agent runtime, prompts, actions, output parsing
-evaluation/                    # metrics (P/R/F1, NDCG, recall@k) + gold labels
-toolplan/
-  data/                        # rollout collection, progress (turn-reward) labeling
-  training/
-    tracer_advantage.py        # action-level advantage estimation
-    tracer_trainer.py          # advantage-weighted SFT trainer
-  config.py                    # central configuration
-scripts/                       # index build, training, eval
-```
 
 ---
 
