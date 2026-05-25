@@ -1,11 +1,11 @@
 # A²Agent
 
-### Action-Level Credit Assignment for Repository-Level Code Localization
+### Action-aware Reinforcement Learning for Repository-Level Code Localization
 
 <!-- TODO: replace with the final paper title / links before camera-ready -->
 
-A²Agent trains repository-level **code-localization agents** with **action-level
-credit assignment**. Instead of assigning a single trajectory-level reward to
+A²Agent trains repository-level **code-localization agents** with **action-aware
+Reinforcement Learning**. Instead of assigning a single trajectory-level reward to
 every turn (as in GRPO/GSPO), A²Agent estimates a *per-turn* advantage by grouping
 turns that share the same recent **action history** (a code-specific *state
 proxy*) and normalizing each turn's discounted return within its group. Two
@@ -17,7 +17,7 @@ complementary rewards drive learning:
   that rewards committing already-explored gold locations to the final answer.
 
 The resulting advantages are converted to per-token weights and used in an
-**advantage-weighted SFT** objective.
+**advantage-weighted RL**.
 
 ---
 
