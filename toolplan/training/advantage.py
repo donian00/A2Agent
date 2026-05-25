@@ -1,5 +1,5 @@
 """
-TRACER: action-level credit assignment for code localization agents.
+Action-level credit assignment for code localization agents.
 
 Computes history-aware, action-level advantages by grouping turns that share
 the same recent action history (state proxy) and normalizing each turn's
@@ -11,9 +11,9 @@ Designed for the phase-separated pipeline:
     Phase 3: Advantage-weighted SFT
 
 Usage:
-    python -m toolplan.training.tracer_advantage \
+    python -m toolplan.training.advantage \
         --progress_file toolplan_data/progress_labels/progress_labels.jsonl \
-        --output_file toolplan_data/hgpo/advantages.jsonl \
+        --output_file toolplan_data/rl/advantages.jsonl \
         --history_length 2 \
         --gamma 0.95
 """
@@ -42,7 +42,7 @@ def hash_tool_call(tool_name: str, tool_args: dict) -> str:
 
 
 def to_hashable(x):
-    """Convert arbitrary nested structure to hashable key (following original TRACER)."""
+    """Convert arbitrary nested structure to hashable key (following the original implementation)."""
     if isinstance(x, (int, float, str, bool)):
         return x
     elif isinstance(x, (np.integer, np.floating)):
@@ -141,9 +141,9 @@ def compute_step_returns(
     return returns
 
 
-# -- TRACER Hierarchical Advantage (observation hash based) ---------------------
+# -- Hierarchical Advantage (observation hash based) ---------------------
 
-def hgpo_compute_advantages(
+def compute_advantages(
     trajectories: list[dict],
     history_length: int = 2,
     gamma: float = 0.95,
@@ -162,12 +162,12 @@ def hgpo_compute_advantages(
     cluster_scheme: str = "state",  # "state" (history only, excl. current action) | "state_action" (legacy)
     terminal_only: bool = False,
 ) -> list[dict]:
-    """Compute TRACER advantages for a group of trajectories (same issue).
+    """Compute advantages for a group of trajectories (same issue).
 
     Cluster scheme:
       - "state":         cluster key = last K tool_calls EXCLUDING current step
                          → cluster contains different actions taken at the same state-history
-                         → mean baseline approximates V(s) (true TRACER intent)
+                         → mean baseline approximates V(s) (the intended baseline)
       - "state_action":  legacy. cluster key = last K tool_calls INCLUDING current step
                          → cluster contains only same-action trajectories (variance reduction)
     """
@@ -384,7 +384,7 @@ def process_all_trajectories(
     total_anchors = 0
 
     for instance_id, trajs in by_instance.items():
-        augmented = hgpo_compute_advantages(
+        augmented = compute_advantages(
             trajs,
             history_length=history_length,
             gamma=gamma,
@@ -477,11 +477,11 @@ def save_results(results: list[dict], output_file: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TRACER advantage computation for code localization")
+    parser = argparse.ArgumentParser(description="advantage computation for code localization")
     parser.add_argument("--progress_file", type=str, required=True,
                         help="Progress labels file from progress_labeler")
     parser.add_argument("--output_file", type=str,
-                        default=str(PROGRESS_DIR / "tracer_advantages.jsonl"))
+                        default=str(PROGRESS_DIR / "advantages.jsonl"))
     parser.add_argument("--history_length", type=int, default=2,
                         help="Max history depth K for hierarchical grouping")
     parser.add_argument("--gamma", type=float, default=0.95,
@@ -511,7 +511,7 @@ def main():
                         help="Scaling for final-step F1 bonus")
     parser.add_argument("--cluster_scheme", type=str, default="state",
                         choices=["state", "state_action"],
-                        help="state = TRACER intent (cluster by history, exclude current action). "
+                        help="state = intended proxy (cluster by history, exclude current action). "
                              "state_action = legacy (same-action grouping).")
     args = parser.parse_args()
 

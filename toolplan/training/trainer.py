@@ -1,7 +1,7 @@
 """
-Offline TRACER Training: Advantage-weighted SFT with per-step TRACER weights.
+Offline advantage-weighted SFT with per-step advantage weights.
 
-Takes pre-computed TRACER advantages (from tracer_advantage.py) and trains the
+Takes pre-computed advantages (from advantage.py) and trains the
 policy with per-token loss weights derived from step-level advantages.
 
 Uses DeepSpeed ZeRO-3 + LoRA, with token_weights passed via a side-channel
@@ -10,11 +10,11 @@ Uses DeepSpeed ZeRO-3 + LoRA, with token_weights passed via a side-channel
 Usage:
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     accelerate launch --num_processes 4 \
-        -m toolplan.training.tracer_trainer \
-        --advantage_file toolplan_data/hgpo/advantages.jsonl \
+        -m toolplan.training.trainer \
+        --advantage_file toolplan_data/rl/advantages.jsonl \
         --base_model Qwen/Qwen3-8B \
         --output_dir outputs \
-        --exp_name qwen3-8b-hgpo
+        --exp_name qwen3-8b-rl
 """
 
 import argparse
@@ -37,7 +37,7 @@ from transformers import (
     Trainer,
 )
 
-from toolplan.config import TracerTrainConfig
+from toolplan.config import TrainConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -84,16 +84,16 @@ except ImportError:
 
 # -- Side-channel for token weights (avoids remove_unused_columns issues) ------
 
-_hgpo_weight_buffer = {}  # Populated by collator, consumed by patched forward
+_weight_buffer = {}  # Populated by collator, consumed by patched forward
 _reward_log_buffer = []  # Append per micro-batch avg reward, drained on step_end
 
 
 # -- Weighted Liger CE patch ---------------------------------------------------
 
 def patch_liger_ce_weighted(model):
-    """Monkey-patch model's forward to use Liger CE with TRACER per-token weights.
+    """Monkey-patch model's forward to use Liger CE with per-token advantage weights.
 
-    Token weights are read from _hgpo_weight_buffer (set by TracerDataCollator)
+    Token weights are read from _weight_buffer (set by WeightedDataCollator)
     instead of from model inputs, avoiding remove_unused_columns=False which
     causes lr_scheduler param_group mismatches with DeepSpeed ZeRO-3.
     """
@@ -112,12 +112,12 @@ def patch_liger_ce_weighted(model):
     def liger_forward(self, input_ids=None, labels=None, **kwargs):
         _liger_call_counter[0] += 1
         if _liger_call_counter[0] <= 3 or _liger_call_counter[0] % 50 == 0:
-            logger.info(f'[liger_forward] call #{_liger_call_counter[0]} labels={"None" if labels is None else "set"} side_channel={"set" if "w" in _hgpo_weight_buffer else "empty"}')
+            logger.info(f'[liger_forward] call #{_liger_call_counter[0]} labels={"None" if labels is None else "set"} side_channel={"set" if "w" in _weight_buffer else "empty"}')
         kwargs.pop('logits_to_keep', None)
         kwargs.pop('num_logits_to_keep', None)
 
         # Read weights from side-channel
-        token_weights = _hgpo_weight_buffer.pop('w', None)
+        token_weights = _weight_buffer.pop('w', None)
 
         model_backbone = self.model if hasattr(self, 'model') else self.language_model
         outputs = model_backbone(
@@ -178,10 +178,10 @@ def patch_liger_ce_weighted(model):
 
 # -- Data Collator that stores weights in side-channel -------------------------
 
-class TracerDataCollator(DataCollatorForSeq2Seq):
+class WeightedDataCollator(DataCollatorForSeq2Seq):
     """DataCollator that emits per-token weights as a batch tensor column.
 
-    The TracerTrainer.compute_loss override consumes batch['token_weights'].
+    The AdvantageWeightedTrainer.compute_loss override consumes batch['token_weights'].
     No module-level side-channel state — robust to DataLoader workers / prefetching.
     """
 
@@ -216,7 +216,7 @@ class WeightedDatasetWrapper(torch.utils.data.Dataset):
 
     Using a plain torch Dataset means Trainer's remove_unused_columns
     (which only strips HF Datasets) won't touch our extra field.
-    The TracerDataCollator will pop token_weights before they reach the model.
+    The WeightedDataCollator will pop token_weights before they reach the model.
     """
 
     def __init__(self, hf_dataset, token_weights_list):
@@ -234,8 +234,8 @@ class WeightedDatasetWrapper(torch.utils.data.Dataset):
 
 # -- Data Loading & Processing -------------------------------------------------
 
-def load_hgpo_data(advantage_file: str, max_tool_output_chars: int = 2000) -> list[dict]:
-    """Load TRACER advantage file and prepare training samples."""
+def load_advantage_data(advantage_file: str, max_tool_output_chars: int = 2000) -> list[dict]:
+    """Load the advantage file and prepare training samples."""
     with open(advantage_file) as f:
         all_trajs = [json.loads(line) for line in f]
 
@@ -332,8 +332,8 @@ def build_weighted_labels(input_ids, step_weights, instruction_ids, response_ids
 
 # -- Weighted-loss Trainer (replaces fragile side-channel monkeypatch) --------
 
-class TracerTrainer(Trainer):
-    """Trainer that applies per-token TRACER advantage weighting to CE loss.
+class AdvantageWeightedTrainer(Trainer):
+    """Trainer that applies per-token advantage weighting to CE loss.
 
     Pops ``token_weights`` from inputs in compute_loss (so the model never
     sees the extra column), then computes weighted CE from logits.
@@ -377,13 +377,13 @@ class TracerTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 
-def train_tracer(cfg: TracerTrainConfig):
+def train(cfg: TrainConfig):
     output_path = os.path.join(cfg.output_dir, cfg.exp_name)
     os.makedirs(output_path, exist_ok=True)
     local_rank = int(os.environ.get("LOCAL_RANK", -1))
 
     if local_rank <= 0:
-        with open(os.path.join(output_path, "hgpo_config.json"), "w") as f:
+        with open(os.path.join(output_path, "train_config.json"), "w") as f:
             json.dump(cfg.__dict__, f, indent=2)
 
     tokenizer = AutoTokenizer.from_pretrained(cfg.base_model, trust_remote_code=True)
@@ -424,13 +424,13 @@ def train_tracer(cfg: TracerTrainConfig):
         else:
             raise FileNotFoundError(f"No adapter found in {cfg.adapter_path}")
         set_peft_model_state_dict(model, adapter_state)
-    # Note: weighted CE is now applied in TracerTrainer.compute_loss (no monkeypatch)
+    # Note: weighted CE is now applied in AdvantageWeightedTrainer.compute_loss (no monkeypatch)
     if local_rank <= 0:
         logger.info("Applied weighted Liger CE patch")
         model.print_trainable_parameters()
 
     # -- Data --
-    training_data = load_hgpo_data(cfg.advantage_file, cfg.max_tool_output_chars)
+    training_data = load_advantage_data(cfg.advantage_file, cfg.max_tool_output_chars)
     if not training_data:
         logger.error("No training data!")
         return
@@ -515,18 +515,18 @@ def train_tracer(cfg: TracerTrainConfig):
             if rank == 0 and state.global_step % 10 == 0:
                 logger.info(f'[RewardLogger] step={state.global_step} rank={rank} buf={buf_len} avg={avg:.4f}')
 
-    trainer = TracerTrainer(
+    trainer = AdvantageWeightedTrainer(
         model=model,
         processing_class=tokenizer,
         train_dataset=dataset,
-        data_collator=TracerDataCollator(tokenizer=tokenizer, padding=True),
+        data_collator=WeightedDataCollator(tokenizer=tokenizer, padding=True),
         args=training_args,
         callbacks=[RewardLogger()],
     )
 
     if local_rank <= 0:
-        logger.info("Starting TRACER training...")
-    _resume = (os.environ.get("TRACER_RESUME") == "1") or None
+        logger.info("Starting training...")
+    _resume = (os.environ.get("RESUME") == "1") or None
     trainer.train(resume_from_checkpoint=_resume)
 
     trainer.save_model(os.path.join(output_path, "adapter"))
@@ -538,14 +538,14 @@ def train_tracer(cfg: TracerTrainConfig):
 # -- CLI -----------------------------------------------------------------------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Offline TRACER Training")
+    parser = argparse.ArgumentParser(description="Offline advantage-weighted training")
     parser.add_argument("--advantage_file", type=str, required=True)
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen3-8B")
     parser.add_argument("--adapter_path", type=str, default="")
     parser.add_argument("--max_seq_length", type=int, default=16384)
     parser.add_argument("--max_tool_output_chars", type=int, default=2000)
     parser.add_argument("--output_dir", type=str, default="outputs")
-    parser.add_argument("--exp_name", type=str, default="qwen3-8b-hgpo")
+    parser.add_argument("--exp_name", type=str, default="qwen3-8b-rl")
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum_steps", type=int, default=8)
@@ -559,7 +559,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    cfg = TracerTrainConfig(
+    cfg = TrainConfig(
         advantage_file=args.advantage_file,
         base_model=args.base_model,
         adapter_path=args.adapter_path,
@@ -576,7 +576,7 @@ def main():
         advantage_clip=args.advantage_clip,
         warmup_steps=args.warmup_steps,
     )
-    train_tracer(cfg)
+    train(cfg)
 
 
 if __name__ == "__main__":

@@ -135,7 +135,6 @@ def build_args_from_config(
         # model — hosted_vllm/ prefix triggers CodeAct conversion in auto_search_main
         model=model_name,
         use_function_calling=True,
-        simple_desc=True,
         # sampling
         num_samples=cfg.num_samples,
         max_attempt_num=3,
@@ -148,7 +147,6 @@ def build_args_from_config(
         timeout=cfg.timeout,
         log_level="INFO",
         use_example=False,
-        rerun_empty_location=False,
         ranking_method="mrr",
         # optional features
         enable_commit_search=False,

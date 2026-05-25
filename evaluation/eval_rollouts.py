@@ -1,17 +1,17 @@
 """
-Evaluate N-rollout self-play results for TRACER.
+Evaluate N-rollout results.
 
 Per-instance metrics averaged across rollouts, plus pass@k and best-of-N.
 
 Usage:
     python -m evaluation.eval_rollouts \
-        --rollout_dir toolplan_data/hgpo/rollouts \
+        --rollout_dir toolplan_data/rl/rollouts \
         --n_rollouts 8 \
         --dataset princeton-nlp/SWE-bench_Verified
 
     # Or with a merged file:
     python -m evaluation.eval_rollouts \
-        --merged_file toolplan_data/hgpo/rollouts/all_rollouts.jsonl \
+        --merged_file toolplan_data/rl/rollouts/all_rollouts.jsonl \
         --dataset princeton-nlp/SWE-bench_Verified
 """
 
@@ -188,7 +188,7 @@ def evaluate_rollouts(
         "pass_at_k": float(np.mean(all_pass_at_k)) if all_pass_at_k else 0.0,
         # Hit analysis
         "avg_hit_rate": float(np.mean(all_hit_rates)) if all_hit_rates else 0.0,
-        # Variance (important for TRACER - need variance for advantage estimation)
+        # Variance (need variance for advantage estimation)
         "avg_reward_variance": float(np.mean(all_variances)) if all_variances else 0.0,
         "n_with_variance": sum(1 for v in all_variances if v > 1e-6),
         "pct_with_variance": sum(1 for v in all_variances if v > 1e-6) / max(n_instances, 1) * 100,
@@ -203,7 +203,7 @@ def print_results(results: dict):
     per = results["per_instance"]
 
     print("\n" + "=" * 70)
-    print("  TRACER Rollout Evaluation Results")
+    print("  Rollout Evaluation Results")
     print("=" * 70)
 
     print(f"\n  Instances: {agg['n_instances']}")
@@ -220,7 +220,7 @@ def print_results(results: dict):
     print(f"  Pass@K (any rollout):     {agg['pass_at_k']:.4f}")
     print(f"  Avg hit rate per instance: {agg['avg_hit_rate']:.4f}")
 
-    print(f"\n  --- Reward Variance (for TRACER) ---")
+    print(f"\n  --- Reward Variance (for advantage estimation) ---")
     print(f"  Avg variance:             {agg['avg_reward_variance']:.6f}")
     print(f"  Instances with variance:  {agg['n_with_variance']} ({agg['pct_with_variance']:.1f}%)")
 
@@ -248,7 +248,7 @@ def print_results(results: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate N-rollout self-play results")
-    parser.add_argument("--rollout_dir", type=str, default="toolplan_data/hgpo/rollouts",
+    parser.add_argument("--rollout_dir", type=str, default="toolplan_data/rl/rollouts",
                         help="Directory with rollout_0/, rollout_1/, ... subdirs")
     parser.add_argument("--merged_file", type=str, default="",
                         help="Merged rollouts file (alternative to rollout_dir)")

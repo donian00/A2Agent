@@ -11,14 +11,13 @@
 # Lenient matching follows progress_labeler._loc_matches (exact / dot-prefix /
 # dot-suffix on the qualified-name part within the same file).
 #
-# Prereq: vLLM serving qwen3-30b at localhost:8001/v1
+# Prereq: serve the teacher model with vLLM (OpenAI-compatible endpoint)
 # Usage:
-#   nohup bash scripts/run_teacher_30b_swegym.sh > logs/teacher_30b_swegym.log 2>&1 &
+#   nohup bash scripts/collect_teacher_trajectories.sh > logs/teacher.log 2>&1 &
 
 # Don't use set -e: child timeouts/stalls are expected and handled.
 
-export OPENAI_API_KEY="dummy"
-export OPENAI_API_BASE="http://localhost:8001/v1"
+# Set OPENAI_API_BASE / OPENAI_API_KEY to your teacher vLLM endpoint
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 export GRAPH_INDEX_DIR='index_data/SWE-Gym/graph_index_v2.3'
 export BM25_INDEX_DIR='index_data/SWE-Gym/BM25_index'
@@ -167,7 +166,6 @@ run_one_pass() {
             --timeout "${TIMEOUT}" \
             --use_function_calling \
             --native_tool_calling \
-            --simple_desc \
             --enable_commit_search \
             --enable_file_summary \
             --exclude_tools examine_commit &

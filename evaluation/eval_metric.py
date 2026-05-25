@@ -56,34 +56,34 @@ def normalized_dcg(pred_target: Tensor, ideal_target: Tensor, k: Optional[int] =
 
 
 def recall_at_k(pred_target: Tensor, ideal_target: Tensor, k: Optional[int] = None) -> Tensor:
-    pred_target = pred_target[:, :k]  # 只考虑前 k 个预测结果
-    relevant = (pred_target == 1).sum(dim=-1)  # 计算预测中相关文档的个数
-    total_relevant = (ideal_target == 1).sum(dim=-1)  # 计算所有相关文档的个数
-    recall = div_no_nan(relevant, total_relevant, na_value=0.)  # 计算 Recall@k
+    pred_target = pred_target[:, :k]  # consider only the top-k predictions
+    relevant = (pred_target == 1).sum(dim=-1)  # count relevant items among predictions
+    total_relevant = (ideal_target == 1).sum(dim=-1)  # count all relevant items
+    recall = div_no_nan(relevant, total_relevant, na_value=0.)  # compute Recall@k
     return recall.mean(0)
 
 
 def acc_at_k(pred_target: Tensor, ideal_target: Tensor, k: Optional[int] = None) -> Tensor:
-    pred_target = pred_target[:, :k]  # 只考虑前 k 个预测结果
+    pred_target = pred_target[:, :k]  # consider only the top-k predictions
     ideal_target = ideal_target[:, :k]
     
-    relevant = (pred_target == 1).sum(dim=-1)  # 计算预测中相关文档的个数
-    total_relevant = (ideal_target == 1).sum(dim=-1)  # 计算所有相关文档的个数
+    relevant = (pred_target == 1).sum(dim=-1)  # count relevant items among predictions
+    total_relevant = (ideal_target == 1).sum(dim=-1)  # count all relevant items
 
     comparison = relevant == total_relevant
     return comparison.sum()/relevant.shape[0]
 
 
 def precision_at_k(pred_target: Tensor, ideal_target: Tensor, k: Optional[int] = None) -> Tensor:
-    pred_target = pred_target[:, :k]  # 只考虑前 k 个预测结果
-    relevant = (pred_target == 1).sum(dim=-1)  # 计算预测中相关文档的个数
-    precision = relevant / k  # 计算 Precision@k
+    pred_target = pred_target[:, :k]  # consider only the top-k predictions
+    relevant = (pred_target == 1).sum(dim=-1)  # count relevant items among predictions
+    precision = relevant / k  # compute Precision@k
     return precision.mean(0)
 
 
 def average_precision_at_k(pred_target: Tensor, ideal_target: Tensor, k: Optional[int] = None) -> Tensor:
     batch_size, k_val = pred_target.shape
-    pred_target = pred_target[:, :k]  # 只考虑前 k 个预测结果
+    pred_target = pred_target[:, :k]  # consider only the top-k predictions
     ideal_target = ideal_target[:, :k]
     
     precisions = []
@@ -91,9 +91,9 @@ def average_precision_at_k(pred_target: Tensor, ideal_target: Tensor, k: Optiona
         ap = 0.0
         relevant_count = 0
         for j in range(k):
-            if pred_target[i, j] == 1:  # 如果是相关文档
+            if pred_target[i, j] == 1:  # if it is a relevant item
                 relevant_count += 1
-                ap += relevant_count / (j + 1)  # 计算 Precision@j
+                ap += relevant_count / (j + 1)  # compute Precision@j
         # if relevant_count > 0:
         ap = ap/k
         precisions.append(ap)

@@ -1,31 +1,31 @@
 #!/bin/bash
-# Full TRACER pipeline: progress labeling -> advantage computation -> training
+# Full pipeline: progress labeling -> advantage computation -> training
 #
 # Prerequisites:
-#   - Self-play rollouts completed (run_hgpo_selfplay.sh)
+#   - Rollouts collected
 #   - Graph indices available
 #
 # Usage:
-#   bash scripts/run_hgpo_train.sh
+#   bash scripts/run_train.sh
 
 set -e
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ROLLOUT_DIR='toolplan_data/hgpo/rollouts'
+ROLLOUT_DIR='toolplan_data/rl/rollouts'
 MERGED_FILE="${ROLLOUT_DIR}/all_rollouts.jsonl"
-PROGRESS_FILE='toolplan_data/hgpo/progress_labels.jsonl'
-ADVANTAGE_FILE='toolplan_data/hgpo/advantages.jsonl'
+PROGRESS_FILE='toolplan_data/rl/progress_labels.jsonl'
+ADVANTAGE_FILE='toolplan_data/rl/advantages.jsonl'
 GRAPH_INDEX_DIR='index_data/SWE-bench_Verified/graph_index_v2.3'
 DATASET='princeton-nlp/SWE-bench_Verified'
 
 BASE_MODEL='Qwen/Qwen3-8B'
 SFT_ADAPTER='outputs/qwen3-8b-v5-sft-v2/adapter'  # existing SFT adapter
 OUTPUT_DIR='outputs'
-EXP_NAME='qwen3-8b-hgpo'
+EXP_NAME='qwen3-8b-rl'
 
-# TRACER hyperparameters
+# hyperparameters
 HISTORY_LENGTH=2   # K: hierarchical context depth
 GAMMA=0.95         # discount factor
 ALPHA=1.0          # hierarchy weighting exponent
@@ -41,7 +41,7 @@ LORA_R=16
 MAX_SEQ=16384
 
 echo "========================================"
-echo "  TRACER Training Pipeline"
+echo "  Training Pipeline"
 echo "========================================"
 
 # ── Phase 1: Progress Labeling ────────────────────────────────────────────────
@@ -63,13 +63,13 @@ fi
 N_TRAJS=$(wc -l < "${PROGRESS_FILE}")
 echo "Total trajectories: ${N_TRAJS}"
 
-# ── Phase 2: TRACER Advantage Computation ──────────────────────────────────────
+# ── Phase 2: Advantage Computation ──────────────────────────────────────
 echo ""
-echo "=== Phase 2: Computing TRACER advantages ==="
+echo "=== Phase 2: Computing advantages ==="
 echo "  history_length=${HISTORY_LENGTH}, gamma=${GAMMA}, alpha=${ALPHA}, beta=${BETA}"
 
 if [ ! -f "$ADVANTAGE_FILE" ]; then
-    python -m toolplan.training.tracer_advantage \
+    python -m toolplan.training.advantage \
         --progress_file "${PROGRESS_FILE}" \
         --graph_index_dir "${GRAPH_INDEX_DIR}" \
         --output_file "${ADVANTAGE_FILE}" \
@@ -79,7 +79,7 @@ if [ ! -f "$ADVANTAGE_FILE" ]; then
         --alpha "${ALPHA}" \
         --beta "${BETA}" \
         --mode "${MODE}"
-    echo "TRACER advantages saved to ${ADVANTAGE_FILE}"
+    echo "advantages saved to ${ADVANTAGE_FILE}"
 else
     echo "Advantages already exist at ${ADVANTAGE_FILE}, skipping."
 fi
@@ -91,14 +91,14 @@ if [ -f "$STATS_FILE" ]; then
     cat "$STATS_FILE" | python -m json.tool
 fi
 
-# ── Phase 3: TRACER Training ──────────────────────────────────────────────────
+# ── Phase 3: Training ──────────────────────────────────────────────────
 echo ""
-echo "=== Phase 3: TRACER Training ==="
+echo "=== Phase 3: Training ==="
 echo "  model=${BASE_MODEL}, lr=${LR}, epochs=${EPOCHS}"
 echo "  adapter_from=${SFT_ADAPTER}"
 
 accelerate launch --num_processes 4 \
-    -m toolplan.training.tracer_trainer \
+    -m toolplan.training.trainer \
     --advantage_file "${ADVANTAGE_FILE}" \
     --base_model "${BASE_MODEL}" \
     --adapter_path "${SFT_ADAPTER}" \
@@ -116,6 +116,6 @@ accelerate launch --num_processes 4 \
 
 echo ""
 echo "========================================"
-echo "  TRACER Training Complete!"
+echo "  Training Complete!"
 echo "  Adapter: ${OUTPUT_DIR}/${EXP_NAME}/adapter"
 echo "========================================"

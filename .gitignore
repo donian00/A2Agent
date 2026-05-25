@@ -236,3 +236,4 @@ scripts/make_paper_figs.py
 scripts/make_motivation_fig.py
 scripts/enrich_gt_swegym.py
 scripts/train_toolonly_*.sh
+scripts/eval_per_rollout.py

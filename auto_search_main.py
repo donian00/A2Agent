@@ -203,8 +203,7 @@ def auto_search_process(result_queue,
                         seed=None,
                         max_iteration_num=20,
                         use_function_calling=True,
-                        native_tool_calling=False,
-                        intercept_first_finish=False):
+                        native_tool_calling=False):
     if not native_tool_calling and tools and ('hosted_vllm' in model_name or 'qwen' in model_name.lower()
     #             #   or model_name=='azure/gpt-4o'
     #             #   or model_name == 'litellm_proxy/o3-mini-2025-01-31'
@@ -231,9 +230,6 @@ def auto_search_process(result_queue,
     last_message = None
     finish = False
     context_trim_count = 0  # track how many times we've trimmed for ContextWindowExceeded
-    _finish_intercept_count = 0  # for delta reward: how many times finish was intercepted
-    _finish_intercept_max = 1   # max intercepts before allowing real finish
-    _first_finish_output = None  # store first finish output for recall_1
     while not finish:
         cur_interation_num += 1
         if cur_interation_num == max_iteration_num:
@@ -348,59 +344,6 @@ def auto_search_process(result_queue,
         for action in actions:
             logging.debug(action.action_type)
             if action.action_type == ActionType.FINISH:
-                # Delta reward: intercept finish to get recall_1
-                if intercept_first_finish and _finish_intercept_count < _finish_intercept_max:
-                    _finish_intercept_count += 1
-                    if _first_finish_output is None:
-                        _first_finish_output = action.thought  # store first attempt
-
-                    # Extract candidate files seen but not deeply examined
-                    import re as _re_e
-                    seen_in_search = set()
-                    examined_deeply = set()
-                    answer_files = set(_re_e.findall(r'[\w/.-]+\.py', action.thought or ''))
-
-                    for m in traj_msgs:
-                        content = str(m.get('content') or '')
-                        if m.get('role') == 'tool' or m.get('role') == 'user':
-                            # Files appearing in tool outputs (search/explore results)
-                            for fp in _re_e.findall(r'\b([\w][\w/.-]*\.py)\b', content):
-                                if '/' in fp and fp not in answer_files:
-                                    seen_in_search.add(fp)
-                        if m.get('role') == 'assistant':
-                            # Files examined via view_summary or get_entity_contents
-                            for tc in (m.get('tool_calls') or []):
-                                fn = tc.get('function', {})
-                                if fn.get('name') in ('view_summary', 'get_entity_contents'):
-                                    args = fn.get('arguments', '')
-                                    for fp in _re_e.findall(r'[\w/.-]+\.py', args):
-                                        examined_deeply.add(fp)
-
-                    unexamined = sorted(seen_in_search - examined_deeply)[:8]
-
-                    logging.info(f"=== Finish intercepted (#{_finish_intercept_count}), unexamined candidates: {len(unexamined)} ===")
-
-                    if unexamined:
-                        candidates_str = "\n".join(f"  - {fp}" for fp in unexamined)
-                        reexamine_msg = (
-                            "STOP. Your current answer may be incomplete. "
-                            "You found these candidate files during exploration but did NOT examine them in detail:\n"
-                            f"{candidates_str}\n\n"
-                            "You MUST either examine at least 2 of these unexamined files using view_summary or get_entity_contents, "
-                            "OR try different search queries (search_code_snippets, search_summary) to find files you may have missed entirely. "
-                            "The bug may be in a file you haven't discovered yet."
-                        )
-                    else:
-                        reexamine_msg = (
-                            "STOP. Before finalizing, you MUST verify your answer is correct. "
-                            "Try different search queries (search_code_snippets, search_summary) to find files you may have missed, "
-                            "or use get_entity_contents to inspect the actual code in your candidate files. "
-                            "Do NOT just repeat your current answer."
-                        )
-                    messages.append({"role": "user", "content": reexamine_msg})
-                    traj_msgs.append({"role": "user", "content": reexamine_msg})
-                    continue
-
                 final_output = action.thought
                 # Fallback: when finish has empty/incomplete args, extract file
                 # paths from assistant message content and tool call arguments.
@@ -507,8 +450,6 @@ def auto_search_process(result_queue,
         },
     }
     # Store first finish output for delta reward computation
-    if _first_finish_output is not None:
-        traj_data['first_finish_output'] = _first_finish_output
     # return final_output, messages, traj_data
     result_queue.put((final_output, messages, traj_data))
 
@@ -538,7 +479,7 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
     logger.handlers = []
     logger.addHandler(queue_handler)
 
-    # Apply tool masking for TRACER rollouts
+    # Apply tool masking for RL rollouts
     set_excluded_tools(getattr(args, 'exclude_tools', []))
 
     logger.debug(f"------ rank {rank} start ------")
@@ -630,7 +571,6 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
                                 codeact_enable_tree_structure_traverser=True,
                                 codeact_enable_commit_search=args.enable_commit_search,
                                 codeact_enable_file_summary=args.enable_file_summary,
-                                simple_desc=args.simple_desc,
                                 exclude_tools=getattr(args, 'exclude_tools', []),
                             )
                         process = ctx.Process(target=_safe_auto_search, kwargs={
@@ -643,7 +583,6 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
                             'tools': tools,
                             'use_function_calling': args.use_function_calling,
                             'native_tool_calling': getattr(args, 'native_tool_calling', False),
-                            'intercept_first_finish': getattr(args, 'intercept_first_finish', False),
                         })
                         process.start()
 
@@ -743,7 +682,7 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
             with output_file_lock:
                 append_to_jsonl(loc_res, args.output_file)
 
-            # Also save trajectory even for failed instances (needed for TRACER)
+            # Also save trajectory even for failed instances (needed for advantage estimation)
             if loc_trajs['trajs']:
                 loc_res['loc_trajs'] = loc_trajs
                 traj_file = os.path.join(args.output_folder, 'loc_trajs.jsonl')
@@ -857,7 +796,7 @@ def localize(args):
         if os.path.exists(args.output_file):
             traj_file = os.path.join(args.output_folder, 'loc_trajs.jsonl')
             locs = load_jsonl(args.output_file)
-            if args.rerun_empty_location or args.rerun_empty_strict or args.rerun_failed:
+            if getattr(args, 'rerun_empty_strict', False) or getattr(args, 'rerun_failed', False):
                 traj_datas = load_jsonl(traj_file)
                 backup_loc_output = backup_file(args.output_file)
                 backup_traj_output = backup_file(traj_file)
@@ -934,7 +873,7 @@ def localize(args):
         finally:
             queue_listener.stop()
 
-        if args.rerun_empty_location or args.rerun_empty_strict:
+        if getattr(args, 'rerun_empty_strict', False):
             try:
                 delete_file(backup_loc_output)
                 delete_file(backup_traj_output)
@@ -1004,19 +943,15 @@ def main():
                         help='Enable function calling features of LLMs. If disabled, codeact will be used to support function calling.')
     parser.add_argument("--native_tool_calling", action="store_true",
                         help='Use native tool calling (skip non-fncall conversion). For models with built-in tool calling support like Qwen3-Coder.')
-    parser.add_argument("--simple_desc", action="store_true",
-                        help="Use simplified function descriptions due to certain LLM limitations. Set to False for better performance when using Claude.")
     parser.add_argument("--enable_commit_search", action="store_true",
                         help="Enable commit history search tools (episodic memory).")
     parser.add_argument("--enable_file_summary", action="store_true",
                         help="Enable file summary tools (semantic memory).")
-    parser.add_argument("--intercept_first_finish", action="store_true",
-                        help="Intercept first finish for delta reward (self-play).")
     parser.add_argument("--prompt_version", type=str, default="v1",
                         choices=["v1", "v2"],
-                        help="Prompt version: v1 (original with fixed workflow) or v2 (free tool use for TRACER self-play).")
+                        help="Prompt version: v1 (original with fixed workflow) or v2 (free tool use for free-form tool use during rollouts).")
     parser.add_argument("--exclude_tools", type=str, nargs="*", default=[],
-                        help="Tool names to exclude (for TRACER tool-masking rollouts).")
+                        help="Tool names to exclude (for tool-masking rollouts).")
 
     parser.add_argument("--max_attempt_num", type=int, default=2,
                         help='Max retry attempts per sample on transient failures.')
@@ -1025,10 +960,9 @@ def main():
     
     parser.add_argument("--log_level", type=str, default='INFO')
     parser.add_argument("--timeout", type=int, default=900)
-    parser.add_argument("--rerun_empty_location", action="store_true")
     parser.add_argument("--rerun_empty_strict", action="store_true",
                         help="Retry instances where ANY of found_files / found_modules / "
-                             "found_entities is empty. Stricter than --rerun_empty_location.")
+                             "found_entities is empty.")
     parser.add_argument("--rerun_failed", action="store_true",
                         help="Re-run instances where found_files have no overlap with gold files from patch.")
     parser.add_argument("--temperature", type=float, default=1.0,

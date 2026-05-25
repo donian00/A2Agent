@@ -59,18 +59,18 @@ class ProgressConfig:
     output_file: str = str(PROGRESS_DIR / "progress_labels.jsonl")
 
 
-# ── TRACER Advantage ────────────────────────────────────────────────────────────
+# ── Advantage ────────────────────────────────────────────────────────────
 
-TRACER_DIR = DATA_DIR / "hgpo"
+RL_DIR = DATA_DIR / "rl"
 
 
 @dataclass
-class TracerConfig:
+class AdvantageConfig:
     # input
     progress_file: str = str(PROGRESS_DIR / "progress_labels.jsonl")
     graph_index_dir: str = str(GRAPH_INDEX_DIR / "SWE-bench_Verified" / "graph_index_v2.3")
 
-    # TRACER parameters
+    # parameters
     history_length: int = 2        # max history depth K for hierarchical grouping
     gamma: float = 0.95            # discount factor for step returns
     step_cost: float = 0.02       # per-step cost penalty in reward
@@ -84,13 +84,13 @@ class TracerConfig:
     weight_max: float = 3.0
 
     # output
-    output_file: str = str(TRACER_DIR / "advantages.jsonl")
+    output_file: str = str(RL_DIR / "advantages.jsonl")
 
 
-# ── TRACER Training ────────────────────────────────────────────────────────────
+# ── Training ────────────────────────────────────────────────────────────
 
 @dataclass
-class TracerTrainConfig:
+class TrainConfig:
     # model
     base_model: str = "Qwen/Qwen3-8B"
     adapter_path: str = ""  # SFT adapter to resume from (optional)
@@ -101,10 +101,10 @@ class TracerTrainConfig:
     lora_alpha: int = 16
 
     # data
-    advantage_file: str = str(TRACER_DIR / "advantages.jsonl")
+    advantage_file: str = str(RL_DIR / "advantages.jsonl")
     max_tool_output_chars: int = 2000
 
-    # TRACER loss
+    # loss
     clip_eps: float = 0.2         # PPO clipping epsilon
     kl_coef: float = 0.05         # KL regularization coefficient
     advantage_clip: float = 5.0   # clip extreme advantages
@@ -119,6 +119,6 @@ class TracerTrainConfig:
 
     # output
     output_dir: str = str(POLICY_DIR)
-    exp_name: str = "qwen3-8b-hgpo"
+    exp_name: str = "qwen3-8b-rl"
 
 

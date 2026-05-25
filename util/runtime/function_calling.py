@@ -102,7 +102,6 @@ def get_tools(
         codeact_enable_tree_structure_traverser: bool = False,
         codeact_enable_commit_search: bool = False,
         codeact_enable_file_summary: bool = False,
-        simple_desc: bool = False,
         exclude_tools: list[str] | None = None,
 
 ) -> list[ChatCompletionToolParam]:
@@ -113,10 +112,7 @@ def get_tools(
     if codeact_enable_search_entity and 'get_entity_contents' not in exclude:
         tools.append(SearchEntityTool)
     if codeact_enable_tree_structure_traverser and 'explore_tree_structure' not in exclude:
-        if simple_desc:
-            tools.append(ExploreTreeStructure_simple)
-        else:
-            tools.append(ExploreTreeStructure)
+        tools.append(ExploreTreeStructure_simple)
     if codeact_enable_commit_search:
         if 'search_commit' not in exclude:
             tools.append(SearchCommitTool)
