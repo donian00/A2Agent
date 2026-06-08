@@ -34,8 +34,8 @@ MODE='mean_norm'   # normalization mode
 
 # Training hyperparameters
 EPOCHS=2
-BATCH_SIZE=1
-GRAD_ACCUM=8
+BATCH_SIZE=4
+GRAD_ACCUM=1
 LR=5e-5
 LORA_R=16
 MAX_SEQ=16384

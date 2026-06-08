@@ -98,11 +98,7 @@ from util.actions.action_parser import ResponseParser
 from util.actions.action import ActionType
 from util.prompts.prompt import PromptManager
 from util.prompts import general_prompt
-from util.prompts.pipelines import (
-    simple_localize_pipeline as simple_loc,
-    auto_search_prompt as auto_search,
-    auto_search_prompt_v2 as auto_search_v2,
-)
+from util.prompts.pipelines import auto_search_prompt as auto_search
 from util.cost_analysis import calc_cost
 from util.utils import *
 from util.process_output import (
@@ -118,7 +114,6 @@ from plugins.location_tools.repo_ops.repo_ops import (
 import litellm
 from litellm import Message as LiteLLMMessage
 from openai import APITimeoutError
-from evaluation.eval_metric import filtered_instances
 
 
 import signal
@@ -153,36 +148,18 @@ def filter_dataset(dataset, filter_column: str, used_list: str):
     return dataset
 
 # build the per-task system/user instruction strings for a single instance
-def get_task_instruction(instance: dict, task: str = 'auto_search', include_pr=False, include_hint=False, prompt_version: str = 'v1'):
-    output_format = None
-    instruction = ""
+def get_task_instruction(instance: dict, include_pr=False, include_hint=False):
+    instruction = auto_search.TASK_INSTRUECTION.format(
+        package_name=instance['instance_id'].split('_')[0]
+    )
 
-    # for auto-search pipeline
-    if task.strip() == 'auto_search':
-        prompt_module = auto_search_v2 if prompt_version == 'v2' else auto_search
-        task_description = prompt_module.TASK_INSTRUECTION.format(
-            package_name=instance['instance_id'].split('_')[0]
-        )
-    
-    elif task.strip() == 'simple_localize':
-        task_description = simple_loc.SEARCH_LOC_TASK_INSTRUCTION
-        output_format = simple_loc.OUTPUT_FORMAT_LOC
-        
-    else:
-        return None
-
-    instruction += task_description
-        
     if include_pr:
-        problem_statement = instance['problem_statement'] # combine into PR-template form (title: first line, rest: description)
+        problem_statement = instance['problem_statement']
         instruction += general_prompt.PR_TEMPLATE.format(
             title=problem_statement.strip().split('\n')[0],
-            description = '\n'.join(problem_statement.strip().split('\n')[1:]).strip()
+            description='\n'.join(problem_statement.strip().split('\n')[1:]).strip()
         )
-    
-    if output_format:
-        instruction += output_format
-    
+
     if include_hint:
         instruction += (
             'IMPORTANT: You should ONLY interact with the environment provided to you AND NEVER ASK FOR HUMAN HELP.\n'
@@ -190,8 +167,6 @@ def get_task_instruction(instance: dict, task: str = 'auto_search', include_pr=F
             'You should NOT modify any files!\n'
         )
 
-    # NOTE: You can actually set slightly different instruction for different task
-    # instruction += AGENT_CLS_TO_INST_SUFFIX
     return instruction
 
 
@@ -554,7 +529,7 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
                     strategy_hint = EXPLORATION_STRATEGIES[sample_idx % len(EXPLORATION_STRATEGIES)]
                     messages.append({
                         "role": "user",
-                        "content": get_task_instruction(bug, include_pr=True, include_hint=True, prompt_version=getattr(args, 'prompt_version', 'v1')) + strategy_hint,
+                        "content": get_task_instruction(bug, include_pr=True, include_hint=True) + strategy_hint,
                     })
                     
                     # Use a simple fork-context Queue instead of a Manager.
@@ -577,7 +552,7 @@ def run_localize(rank, args, bug_queue, log_queue, output_file_lock, traj_file_l
                             'result_queue': result_queue,
                             'model_name': args.model,
                             'messages': messages,
-                            'fake_user_msg': (auto_search_v2 if getattr(args, 'prompt_version', 'v1') == 'v2' else auto_search).FAKE_USER_MSG_FOR_LOC,
+                            'fake_user_msg': auto_search.FAKE_USER_MSG_FOR_LOC,
                             'temp': getattr(args, 'temperature', 1.0),
                             'seed': getattr(args, 'seed', None),
                             'tools': tools,
@@ -854,7 +829,6 @@ def localize(args):
         for bug in bench_tests:
             instance_id = bug["instance_id"]
             if instance_id in processed_instance:
-            # if instance_id in processed_instance or instance_id in filtered_instances:
                 print(f"instance {instance_id} has already been processed, skip.")
             else:
                 queue.put(bug)
@@ -947,9 +921,6 @@ def main():
                         help="Enable commit history search tools (episodic memory).")
     parser.add_argument("--enable_file_summary", action="store_true",
                         help="Enable file summary tools (semantic memory).")
-    parser.add_argument("--prompt_version", type=str, default="v1",
-                        choices=["v1", "v2"],
-                        help="Prompt version: v1 (original with fixed workflow) or v2 (free tool use for free-form tool use during rollouts).")
     parser.add_argument("--exclude_tools", type=str, nargs="*", default=[],
                         help="Tool names to exclude (for tool-masking rollouts).")
 

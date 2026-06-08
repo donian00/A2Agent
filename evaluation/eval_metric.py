@@ -10,35 +10,6 @@ from datasets import load_dataset
 import collections
 import re
 
-filtered_instances=['pytest-dev__pytest-5227',
- 'sympy__sympy-15345',
- 'sympy__sympy-21614',
- 'scikit-learn__scikit-learn-13439',
- 'sympy__sympy-11400',
- 'sympy__sympy-19487',
- 'sympy__sympy-15308',
- 'django__django-12915',
- 'sympy__sympy-20590',
- 'sympy__sympy-17022',
- 'django__django-11099',
- 'django__django-13220',
- 'django__django-11964',
- 'matplotlib__matplotlib-25332',
- 'django__django-10914',
- 'django__django-14915',
- 'django__django-11049',
- 'django__django-11564',
- 'sympy__sympy-17655',
- 'sympy__sympy-16106',
- 'sympy__sympy-12171',
- 'django__django-15400',
- 'django__django-14411',
- 'sympy__sympy-21055',
- 'django__django-15213',
- 'django__django-15902',
- 
- ]
-
 def _dcg(target: Tensor) -> Tensor:
     batch_size, k = target.shape
     rank_positions = torch.arange(1, k + 1, dtype=torch.float32, device=target.device).tile((batch_size, 1))
@@ -167,9 +138,7 @@ def cal_metrics_w_file(gt_file, loc_file, key,
                 level,
                 k_values, # < 100
                 metrics=['acc', 'ndcg', 'precision', 'recall', 'map'],
-                filter_list=filtered_instances,
                 selected_list=None,
-                # merge_init = True,
                 ):
     assert key in ['found_files', 'found_modules', 'found_entities', 'docs']
     
@@ -213,7 +182,6 @@ def cal_metrics_w_file(gt_file, loc_file, key,
     # for loc in loc_output:
     for instance_id in gt_dict.keys():
         # instance_id = loc['instance_id']
-        if filter_list and instance_id in filter_list: continue # filter
         if selected_list and instance_id not in selected_list: continue
         if not gt_dict[instance_id]: continue
         

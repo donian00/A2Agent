@@ -7,7 +7,7 @@ Rollout trajectory generation using a local vLLM server.
 
 Usage:
     python -m toolplan.data.generate_trajectories \
-        --model_path "Qwen/Qwen2.5-Coder-7B-Instruct" \
+        --model_path "Qwen/Qwen3-8B" \
         --dataset "princeton-nlp/SWE-bench_Verified" \
         --split "test" \
         --num_samples 5 \
@@ -239,7 +239,7 @@ def _generate_standard(cfg: SelfPlayConfig, model_path: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Self-play trajectory generation")
     parser.add_argument("--model_path", type=str,
-                        default="Qwen/Qwen2.5-Coder-7B-Instruct")
+                        default="Qwen/Qwen3-8B")
     parser.add_argument("--dataset", type=str,
                         default="princeton-nlp/SWE-bench_Verified")
     parser.add_argument("--split", type=str, default="test")

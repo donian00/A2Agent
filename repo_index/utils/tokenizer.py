@@ -5,7 +5,7 @@ _enc = None
 _voyageai = None
 
 
-def count_tokens(content: str, model: str = 'gpt-3.5-turbo') -> int:
+def count_tokens(content: str, model: str = 'cl100k_base') -> int:
     global _enc, _voyageai
 
     if model.startswith('voyage'):
@@ -40,7 +40,10 @@ def count_tokens(content: str, model: str = 'gpt-3.5-turbo') -> int:
                 '_static/tiktoken_cache',
             )
 
-        _enc = tiktoken.encoding_for_model(model)
+        try:
+            _enc = tiktoken.encoding_for_model(model)
+        except (KeyError, ValueError):
+            _enc = tiktoken.get_encoding(model)
 
         if should_revert:
             del os.environ['TIKTOKEN_CACHE_DIR']

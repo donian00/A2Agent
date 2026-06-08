@@ -141,7 +141,7 @@ accelerate launch --num_processes 4 \
     --base_model Qwen/Qwen3-8B \
     --adapter_path outputs/qwen3-8b-sft/adapter \
     --output_dir outputs --exp_name qwen3-8b-rl \
-    --epochs 2 --batch_size 1 --grad_accum_steps 8 \
+    --epochs 2 --batch_size 4 --grad_accum_steps 1 \
     --learning_rate 5e-5 --lora_r 16 --advantage_clip 5.0 --warmup_steps 10
 ```
 
@@ -202,7 +202,7 @@ results = evaluate_results('result_path/verified/location/loc_outputs.jsonl')
 | Hyperparameter | Value | | Hyperparameter | Value |
 |---|---|---|---|---|
 | History depth `H` | 2 | | Discount `gamma` | 0.9 |
-| Depth weights `w_k` | proportional to (k+1) | | Step cost `c` | 0.02 |
+| Depth weights `w_k` | proportional to (k+1) | | Token-weight bounds | 0.1, 3.0 |
 | Advantage clip `kappa` | 5.0 | | Token-weight temp `beta` | 1.5 |
 | Rollouts/issue `N` | 8 | | Max tool calls | 20 |
 | LoRA `r`, `alpha` | 16, 16 | | Batch size | 16 |
