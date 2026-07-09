@@ -187,18 +187,6 @@ python auto_search_main.py \
 # convenience wrapper: bash scripts/run_eval.sh
 ```
 
-**Decoding.** Evaluation uses greedy decoding (`--temperature 0.0`); no
-`top_p` or `repetition_penalty` is applied, and `--seed` is inert because
-greedy decoding draws no random numbers. The policy emits tool calls as XML
-(`<function=...>`) which the client parses, so `--native_tool_calling` is left
-off and vLLM needs no model-specific `--tool-call-parser`.
-
-Greedy decoding removes sampling variance but does not guarantee bit-wise
-identical runs: vLLM's continuous batching varies batch composition, which
-perturbs logits in their low-order bits and can flip the argmax at a near-tie.
-Serve with `--max-num-seqs 1` and run `--num_processes 1` if you need strict
-determinism.
-
 **Metrics**: instance-level Precision / Recall / **F1** at file, module, and
 function granularity:
 
