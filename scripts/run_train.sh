@@ -14,11 +14,18 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 ROLLOUT_DIR='toolplan_data/rl/rollouts'
+# all_rollouts.jsonl must be the concatenation of the per-rollout `loc_trajs.jsonl`
+# files (NOT `loc_outputs.jsonl`, which carries no `loc_trajs` field and silently
+# yields zero labelled trajectories in Phase 1).
 MERGED_FILE="${ROLLOUT_DIR}/all_rollouts.jsonl"
 PROGRESS_FILE='toolplan_data/rl/progress_labels.jsonl'
 ADVANTAGE_FILE='toolplan_data/rl/advantages.jsonl'
-GRAPH_INDEX_DIR='index_data/SWE-bench_Verified/graph_index_v2.3'
-DATASET='princeton-nlp/SWE-bench_Verified'
+
+# RL rollouts are collected on SWE-Gym train. The evaluation benchmarks
+# (SWE-bench Verified / Pro) are never seen during training.
+DATASET='SWE-Gym/SWE-Gym'
+SPLIT='train'
+GT_FILE='evaluation/gt_location/SWE-Gym/train/gt_location.jsonl'
 
 BASE_MODEL='Qwen/Qwen3-8B'
 SFT_ADAPTER='outputs/qwen3-8b-v5-sft-v2/adapter'  # existing SFT adapter
@@ -52,7 +59,8 @@ if [ ! -f "$PROGRESS_FILE" ]; then
     python -m toolplan.data.progress_labeler \
         --traj_file "${MERGED_FILE}" \
         --dataset "${DATASET}" \
-        --split test \
+        --split "${SPLIT}" \
+        --gt_file "${GT_FILE}" \
         --step_cost_penalty 0.02 \
         --output_file "${PROGRESS_FILE}"
     echo "Progress labels saved to ${PROGRESS_FILE}"
@@ -71,7 +79,6 @@ echo "  history_length=${HISTORY_LENGTH}, gamma=${GAMMA}, alpha=${ALPHA}, beta=$
 if [ ! -f "$ADVANTAGE_FILE" ]; then
     python -m toolplan.training.advantage \
         --progress_file "${PROGRESS_FILE}" \
-        --graph_index_dir "${GRAPH_INDEX_DIR}" \
         --output_file "${ADVANTAGE_FILE}" \
         --history_length "${HISTORY_LENGTH}" \
         --gamma "${GAMMA}" \

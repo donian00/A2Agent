@@ -38,9 +38,10 @@ python auto_search_main.py \
     --num_processes "$NUM_PROCESSES" \
     --timeout 600 \
     --use_function_calling \
-    --native_tool_calling \
     --enable_commit_search \
     --enable_file_summary \
-    --num_samples 1
+    --num_samples 1 \
+    --temperature 0.0 \
+    --seed 42
 
 echo "=== Done. Results in ${RESULT_PATH}/location/loc_outputs.jsonl ==="

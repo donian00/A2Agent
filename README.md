@@ -125,14 +125,14 @@ python -m toolplan.data.generate_trajectories \
 # (b) TURN-LEVEL REWARD: label each step's progress (delta recall) + step cost
 python -m toolplan.data.progress_labeler \
     --traj_file <merged_loc_trajs>.jsonl --dataset SWE-Gym --split train \
+    --gt_file evaluation/gt_location/SWE-Gym/train/gt_location.jsonl \
     --step_cost_penalty 0.02 --output_file progress_labels.jsonl
 
 # (c) ACTION-LEVEL ADVANTAGE: history-aware grouping + discounted return
 python -m toolplan.training.advantage \
     --progress_file progress_labels.jsonl \
-    --graph_index_dir $GRAPH_INDEX_DIR \
     --output_file advantages.jsonl \
-    --history_length 2 --gamma 0.9 --step_cost 0.02 --beta 1.5 --mode mean_norm
+    --history_length 2 --gamma 0.95 --step_cost 0.02 --beta 1.5 --mode mean_norm
 
 # (d) ADVANTAGE-WEIGHTED SFT
 accelerate launch --num_processes 4 \
@@ -181,11 +181,23 @@ python auto_search_main.py \
     --localize --merge \
     --output_folder result_path/verified/location \
     --eval_n_limit 500 --num_processes 8 --timeout 120 \
-    --use_function_calling --simple_desc \
+    --use_function_calling \
     --enable_commit_search --enable_file_summary \
-    --num_samples 1 --rerun_empty_location
+    --num_samples 1 --temperature 0.0
 # convenience wrapper: bash scripts/run_eval.sh
 ```
+
+**Decoding.** Evaluation uses greedy decoding (`--temperature 0.0`); no
+`top_p` or `repetition_penalty` is applied, and `--seed` is inert because
+greedy decoding draws no random numbers. The policy emits tool calls as XML
+(`<function=...>`) which the client parses, so `--native_tool_calling` is left
+off and vLLM needs no model-specific `--tool-call-parser`.
+
+Greedy decoding removes sampling variance but does not guarantee bit-wise
+identical runs: vLLM's continuous batching varies batch composition, which
+perturbs logits in their low-order bits and can flip the argmax at a near-tie.
+Serve with `--max-num-seqs 1` and run `--num_processes 1` if you need strict
+determinism.
 
 **Metrics**: instance-level Precision / Recall / **F1** at file, module, and
 function granularity:

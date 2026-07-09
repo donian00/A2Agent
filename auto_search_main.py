@@ -179,10 +179,11 @@ def auto_search_process(result_queue,
                         max_iteration_num=20,
                         use_function_calling=True,
                         native_tool_calling=False):
-    if not native_tool_calling and tools and ('hosted_vllm' in model_name or 'qwen' in model_name.lower()
-    #             #   or model_name=='azure/gpt-4o'
-    #             #   or model_name == 'litellm_proxy/o3-mini-2025-01-31'
-                ):
+    if not native_tool_calling and tools:
+        # CodeAct mode: assistant emits XML (`<function=...>`) as content; the
+        # client parses tool calls out of it (see convert_fncall_* below). This
+        # avoids vLLM needing model-specific tool-call-parser flags for every
+        # backbone (Mistral, Llama, etc. all work through the same XML path).
         use_function_calling = False
         
     # NOTE: For qwen/hosted_vllm, fncall→non-fncall conversion now happens
@@ -223,14 +224,14 @@ def auto_search_process(result_queue,
 
             # new conversation
             seed_kwargs = {'seed': seed} if seed is not None else {}
-            if not native_tool_calling and tools and ('hosted_vllm' in model_name or 'qwen' in model_name.lower()):
+            if not native_tool_calling and tools:
                 # Convert to non-fncall format in a TEMPORARY variable so that
                 # the tool-description suffix is not accumulated in `messages`
                 # across iterations (each call appends the suffix to the system msg).
                 api_messages = convert_fncall_messages_to_non_fncall_messages(messages, tools, add_in_context_learning_example=False)
                 response = litellm.completion(
                     model=model_name,
-                    temperature=temp, top_p=0.8, repetition_penalty=1.05,
+                    temperature=temp,
                     messages=api_messages,
                     stop=NON_FNCALL_STOP_WORDS,
                     **seed_kwargs,
@@ -286,9 +287,7 @@ def auto_search_process(result_queue,
         
         raw_response = deepcopy(response)
         # logging.info('response.choices[0].message')
-        if not native_tool_calling and tools and ('hosted_vllm' in model_name or 'qwen' in model_name.lower()
-                      or 'deepseek' in model_name
-                      ):
+        if not native_tool_calling and tools:
             try:
                 non_fncall_response_message = response.choices[0].message
                 fn_call_messages_with_response = (
@@ -936,10 +935,13 @@ def main():
                              "found_entities is empty.")
     parser.add_argument("--rerun_failed", action="store_true",
                         help="Re-run instances where found_files have no overlap with gold files from patch.")
-    parser.add_argument("--temperature", type=float, default=1.0,
-                        help="Sampling temperature passed to the model.")
-    parser.add_argument("--seed", type=int, default=None,
-                        help="Sampling seed (forwarded to litellm/vLLM).")
+    parser.add_argument("--temperature", type=float, default=0.0,
+                        help="Decoding temperature. 0.0 = greedy (the default, and "
+                             "what the reported results use).")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Sampling seed, forwarded to litellm/vLLM. Only has an "
+                             "effect when --temperature > 0; greedy decoding draws "
+                             "no random numbers.")
     args = parser.parse_args()
 
     args.output_file = os.path.join(args.output_folder, args.output_file)
