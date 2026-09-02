@@ -217,7 +217,15 @@ results = evaluate_results('result_path/verified/location/loc_outputs.jsonl')
 
 ## Citation
 
-Anonymized for double-blind review. Citation will be added upon acceptance.
+If you find this work useful, please cite:
 
-This work builds on the LocAgent code-localization framework and tool
-infrastructure (Chen et al., 2025).
+```bibtex
+@article{kim2026a2agent,
+  title={A$^2$Agent: Action-Aware Reinforcement Learning for Repository-Level Code Localization Agents},
+  author={Kim, Doyeon and Bae, Suyoung and Lee, Yumin and Lee, Jee-Hyong},
+  journal={arXiv preprint arXiv:2608.29831},
+  year={2026}
+}
+```
+
+This work builds on the LocAgent code-localization framework and tool infrastructure ([Chen et al., 2025](https://arxiv.org/abs/2503.09089)).
