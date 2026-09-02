@@ -2,6 +2,11 @@
 
 ### Action-aware Reinforcement Learning for Repository-Level Code Localization
 
+[![arXiv](https://img.shields.io/badge/arXiv-2608.29831-b31b1b.svg)](https://arxiv.org/abs/2608.29831)
+
+Official implementation of "A²Agent: Action-Aware Reinforcement Learning for 
+Repository-Level Code Localization Agents" (EMNLP 2026).
+
 <!-- TODO: replace with the final paper title / links before camera-ready -->
 
 A²Agent trains repository-level **code-localization agents** with **action-aware
